@@ -4,7 +4,6 @@ import random
 import string
 import requests
 from hashlib import sha1
-import pyperclip
 
 # Custom CSS with animations
 st.markdown("""
