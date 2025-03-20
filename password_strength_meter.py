@@ -439,6 +439,388 @@
 
 
 
+import streamlit as st
+import re
+import random
+import string
+import requests
+from hashlib import sha1
+import pyperclip
+
+# Custom CSS with animations
+st.markdown("""
+<style>
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
+        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+    }
+    
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateX(-50px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+    
+    @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+        40% { transform: translateY(-20px); }
+        60% { transform: translateY(-10px); }
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .header-container {
+        animation: fadeIn 1s ease-out;
+        text-align: center;
+        padding: 2rem 0;
+        border-bottom: 3px solid #2c3e50;
+        margin-bottom: 2rem;
+    }
+    
+    .expert-title {
+        font-size: 1.4rem;
+        background: linear-gradient(90deg, #2c3e50, #3498db, #2c3e50);
+        background-size: 200% auto;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        display: inline-block;
+        animation: expertShine 3s linear infinite;
+        margin-top: 1rem;
+    }
+    
+    .signature {
+        font-family: 'Brush Script MT', cursive;
+        font-size: 2rem;
+        color: #3498db;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-box {
+        animation: pulse 2s infinite;
+        padding: 1rem;
+        border-radius: 10px;
+        transition: all 0.3s ease;
+    }
+    
+    .metric-box:hover {
+        transform: scale(1.05);
+    }
+    
+    .feedback-item {
+        animation: slideIn 0.5s ease-out;
+        padding: 0.5rem;
+    }
+    
+    .generated-password {
+        animation: bounce 0.8s ease-out;
+        font-family: 'Courier New', monospace;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 5px;
+        margin: 10px 0;
+        word-break: break-all;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .copy-button:hover {
+        animation: spin 0.5s linear;
+        background: #3498db;
+        color: white;
+    }
+    
+    .stProgress {
+        border-radius: 5px;
+        overflow: hidden;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Image loading (unchanged)
+try:
+    st.image("github_dp_oval.png", width=100)
+except FileNotFoundError:
+    st.warning("Profile image not found. Please ensure 'github_dp_oval.png' is in the same directory.")
+except Exception as e:
+    st.warning(f"Error loading image: {str(e)}")
+
+# Header (unchanged)
+st.markdown("""
+<div class="header-container">
+    <div class="signature">Ibrahim Tayyab</div>
+    <div style="color: #7f8c8d; margin-bottom: 0.5rem;">@Tayyab.R</div>
+    <div class="expert-title">Password Strength Checker</div>
+</div>
+""", unsafe_allow_html=True)
+
+def check_breached_password(password):
+    """Check password against Have I Been Pwned database"""
+    sha1password = sha1(password.encode('utf-8')).hexdigest().upper()
+    prefix, suffix = sha1password[:5], sha1password[5:]
+    try:
+        response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}")
+        if response.status_code == 200:
+            hashes = (line.split(':') for line in response.text.splitlines())
+            for h, count in hashes:
+                if h == suffix:
+                    return int(count)
+    except Exception:
+        return None
+    return 0
+
+def password_strength_analysis(password):
+    """Analyze password characteristics"""
+    analysis = {
+        'length': len(str(password)),
+        'uppercase': bool(re.search(r'[A-Z]', password)),
+        'lowercase': bool(re.search(r'[a-z]', password)),
+        'digit': bool(re.search(r'\d', password)),
+        'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password)),
+        'repeating': bool(re.search(r'(.)\1{2,}', password)),
+        'sequences': bool(re.search(r'(1234|abcd|qwerty|asdfgh|zxcvbn)', password.lower())),
+        'common': password.lower() in [p.lower() for p in common_passwords],
+        'breach_count': check_breached_password(password)
+    }
+    return analysis
+
+def calculate_score_and_rating(analysis):
+    """Calculate password strength score and assign rating"""
+    score = 0
+    length = analysis['length']
+    
+    if length >= 16: score += 4
+    elif length >= 12: score += 3
+    elif length >= 8: score += 2
+    elif length < 6: score -= 1
+    
+    if analysis['uppercase']: score += 1
+    if analysis['lowercase']: score += 1
+    if analysis['digit']: score += 1
+    if analysis['special']: score += 2
+    
+    if analysis['repeating']: score -= 2
+    if analysis['sequences']: score -= 3
+    if analysis['common']: score = 0
+    
+    final_score = max(min(score, 10), 0)
+    
+    if final_score >= 8:
+        rating = "Strong"
+        color = "#2ecc71"
+    elif final_score >= 5:
+        rating = "Moderate"
+        color = "#f1c40f"
+    else:
+        rating = "Weak"
+        color = "#e74c3c"
+    
+    return final_score, rating, color
+
+def generate_improvement_feedback(analysis, rating):
+    """Provide specific feedback to improve weak passwords"""
+    feedback = []
+    
+    if rating in ["Weak", "Moderate"]:
+        if analysis['length'] < 12:
+            feedback.append(f"Increase length to at least 12 characters (currently {analysis['length']})")
+        if not analysis['uppercase']:
+            feedback.append("Add uppercase letters (e.g., A, B, C)")
+        if not analysis['lowercase']:
+            feedback.append("Add lowercase letters (e.g., a, b, c)")
+        if not analysis['digit']:
+            feedback.append("Include numbers (e.g., 0-9)")
+        if not analysis['special']:
+            feedback.append("Add special characters (e.g., !@#$%^&*)")
+        if analysis['repeating']:
+            feedback.append("Avoid repeating characters (e.g., aaa)")
+        if analysis['sequences']:
+            feedback.append("Remove predictable sequences (e.g., 1234, qwerty)")
+        if analysis['common']:
+            feedback.append("Avoid common passwords (e.g., 'password')")
+    
+    return feedback if feedback else ["Password is strong - great job!"]
+
+def generate_advanced_password(length=16, include_special=True, include_numbers=True):
+    """Generate a secure random password"""
+    chars = string.ascii_letters
+    if include_numbers: chars += string.digits
+    if include_special: chars += '!@#$%^&*'
+    
+    while True:
+        password = ''.join(random.choice(chars) for _ in range(length))
+        analysis = password_strength_analysis(password)
+        if (analysis['uppercase'] and analysis['lowercase'] and 
+            (not include_numbers or analysis['digit']) and 
+            (not include_special or analysis['special'])):
+            return password
+
+common_passwords = ['password', '123456', 'qwerty', 'admin', 'welcome']
+
+# Initialize session state
+if 'generated_password' not in st.session_state:
+    st.session_state.generated_password = ""
+if 'password_input' not in st.session_state:
+    st.session_state.password_input = ""
+if 'strength_history' not in st.session_state:
+    st.session_state.strength_history = []
+if 'show_analysis' not in st.session_state:
+    st.session_state.show_analysis = False
+
+col1, col2 = st.columns([2, 1], gap="large")
+
+with col1:
+    st.markdown('### Security Assessment')
+    
+    # Show/Hide Password Toggle
+    show_password = st.checkbox("Show Password", False)
+    input_type = "password" if not show_password else "default"  # Fixed: Use 'default' instead of 'text'
+    
+    # Text input with immediate updates
+    st.text_input(
+        "Enter password for analysis:", 
+        type=input_type,
+        key="password_input"
+    )
+
+    # Apply Button to manually trigger analysis
+    if st.button("Apply", use_container_width=True):
+        st.session_state.show_analysis = True
+
+    # Analyze immediately when password_input changes or Apply is clicked
+    if st.session_state.password_input and (st.session_state.show_analysis or True):  # Keeping real-time updates
+        analysis = password_strength_analysis(st.session_state.password_input)
+        score, rating, color = calculate_score_and_rating(analysis)
+        feedback = generate_improvement_feedback(analysis, rating)
+        
+        # Update strength history (keep last 3)
+        st.session_state.strength_history.append(f"{rating} ({score}/10)")
+        st.session_state.strength_history = st.session_state.strength_history[-3:]
+        
+        # Display Strength Rating
+        st.markdown('#### Password Strength')
+        st.markdown(f"""
+        <div class="metric-box" style="text-align: center; background: {color}20; border: 2px solid {color};">
+            <div style="font-size: 1.5rem; color: {color};">{rating}</div>
+            <div style="font-size: 1rem;">Score: {score}/10</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Progress Bar with gradient
+        progress_value = min(score / 10, 1.0)
+        st.markdown(f"""
+        <div class="stProgress" style="background: #eee;">
+            <div class="st-em" style="width: {progress_value*100}%;
+                background: linear-gradient(90deg, {color}, #fff); height: 12px;">
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Detailed Analysis
+        st.markdown('#### Analysis Details')
+        st.write(f"Length: {analysis['length']} characters")
+        st.write(f"Uppercase: {'Yes' if analysis['uppercase'] else 'No'}")
+        st.write(f"Lowercase: {'Yes' if analysis['lowercase'] else 'No'}")
+        st.write(f"Numbers: {'Yes' if analysis['digit'] else 'No'}")
+        st.write(f"Special Chars: {'Yes' if analysis['special'] else 'No'}")
+        
+        # Vulnerability Report
+        st.markdown('#### Vulnerability Report')
+        if analysis['breach_count']:
+            st.error(f"🚨 Breached {analysis['breach_count']} times")
+        if analysis['common']:
+            st.error("🚨 Common password detected")
+        if analysis['sequences']:
+            st.warning("⚠️ Predictable sequence found")
+        if analysis['repeating']:
+            st.warning("⚠️ Repeating characters detected")
+        
+        # Improvement Feedback with animation
+        st.markdown('#### How to Improve')
+        for tip in feedback:
+            st.markdown(f'<div class="feedback-item">- {tip}</div>', unsafe_allow_html=True)
+
+        # Strength History
+        st.markdown('#### Recent Strength History')
+        for entry in reversed(st.session_state.strength_history):
+            st.write(f"- {entry}")
+
+with col2:
+    st.markdown('### Password Generator')
+    with st.expander("Options", expanded=True):
+        pwd_length = st.slider("Length", 12, 32, 16)
+        include_upper = st.checkbox("Uppercase", True)
+        include_lower = st.checkbox("Lowercase", True)
+        include_numbers = st.checkbox("Numbers", True)
+        include_special = st.checkbox("Special Chars", True)
+    
+    col_gen, col_regen = st.columns(2)
+    with col_gen:
+        if st.button("Generate Password", use_container_width=True):
+            st.session_state.generated_password = generate_advanced_password(
+                pwd_length,
+                include_special=include_special,
+                include_numbers=include_numbers
+            )
+    with col_regen:
+        if st.button("Regenerate", use_container_width=True):
+            st.session_state.generated_password = generate_advanced_password(
+                pwd_length,
+                include_special=include_special,
+                include_numbers=include_numbers
+            )
+    
+    if st.session_state.generated_password:
+        st.markdown(f'<div class="generated-password">{st.session_state.generated_password}</div>', unsafe_allow_html=True)
+        
+        if st.button("Copy to Clipboard", key="copy_button", help="Click to copy!", type="primary"):
+            try:
+                pyperclip.copy(st.session_state.generated_password)
+                st.success("Password copied to clipboard!")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Failed to copy: {str(e)}")
+                st.info("Please copy manually by selecting the password above.")
+        
+        st.download_button(
+            label="Download Password",
+            data=st.session_state.generated_password,
+            file_name="generated_password.txt",
+            mime="text/plain"
+        )
+
+st.markdown("---")
+with st.expander("Security Guidelines"):
+    st.markdown("""
+    **Enterprise Standards**
+    - 12+ character minimum
+    - Mix character types
+    - No personal info
+    - Regular rotation
+    - Unique per service
+    """)
+
+st.markdown("---")
+st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.4.1")
+
+
+
+
+
+
+
+
+
+
+
 # import streamlit as st
 # import re
 # import random
@@ -447,7 +829,7 @@
 # from hashlib import sha1
 # import pyperclip
 
-# # Custom CSS with animations
+# # Custom CSS (unchanged)
 # st.markdown("""
 # <style>
 #     @keyframes fadeIn {
@@ -455,26 +837,9 @@
 #         to { opacity: 1; transform: translateY(0); }
 #     }
     
-#     @keyframes pulse {
-#         0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
-#         70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
-#         100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
-#     }
-    
-#     @keyframes slideIn {
-#         from { opacity: 0; transform: translateX(-50px); }
-#         to { opacity: 1; transform: translateX(0); }
-#     }
-    
-#     @keyframes bounce {
-#         0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-#         40% { transform: translateY(-20px); }
-#         60% { transform: translateY(-10px); }
-#     }
-    
-#     @keyframes spin {
-#         0% { transform: rotate(0deg); }
-#         100% { transform: rotate(360deg); }
+#     @keyframes expertShine {
+#         0% { background-position: -200% 0; }
+#         100% { background-position: 200% 0; }
 #     }
     
 #     .header-container {
@@ -505,42 +870,24 @@
 #         margin-bottom: 0.5rem;
 #     }
     
-#     .metric-box {
-#         animation: pulse 2s infinite;
-#         padding: 1rem;
-#         border-radius: 10px;
-#         transition: all 0.3s ease;
-#     }
-    
 #     .metric-box:hover {
-#         transform: scale(1.05);
+#         transform: scale(1.02);
+#         transition: transform 0.3s ease;
 #     }
     
-#     .feedback-item {
-#         animation: slideIn 0.5s ease-out;
-#         padding: 0.5rem;
+#     @keyframes passwordPop {
+#         0% { transform: scale(0.9); opacity: 0; }
+#         100% { transform: scale(1); opacity: 1; }
 #     }
     
 #     .generated-password {
-#         animation: bounce 0.8s ease-out;
+#         animation: passwordPop 0.5s ease-out;
 #         font-family: 'Courier New', monospace;
 #         padding: 1rem;
 #         background: #f8f9fa;
 #         border-radius: 5px;
 #         margin: 10px 0;
 #         word-break: break-all;
-#         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-#     }
-    
-#     .copy-button:hover {
-#         animation: spin 0.5s linear;
-#         background: #3498db;
-#         color: white;
-#     }
-    
-#     .stProgress {
-#         border-radius: 5px;
-#         overflow: hidden;
 #     }
 # </style>
 # """, unsafe_allow_html=True)
@@ -670,56 +1017,40 @@
 #     st.session_state.generated_password = ""
 # if 'password_input' not in st.session_state:
 #     st.session_state.password_input = ""
-# if 'strength_history' not in st.session_state:
-#     st.session_state.strength_history = []
-# if 'show_analysis' not in st.session_state:
-#     st.session_state.show_analysis = False
 
 # col1, col2 = st.columns([2, 1], gap="large")
 
 # with col1:
 #     st.markdown('### Security Assessment')
     
-#     # Show/Hide Password Toggle
-#     show_password = st.checkbox("Show Password", False)
-#     input_type = "password" if not show_password else "default"  # Fixed: Use 'default' instead of 'text'
-    
 #     # Text input with immediate updates
 #     st.text_input(
 #         "Enter password for analysis:", 
-#         type=input_type,
-#         key="password_input"
+#         type="password",
+#         key="password_input"  # This ties the input directly to session_state.password_input
 #     )
 
-#     # Apply Button to manually trigger analysis
-#     if st.button("Apply", use_container_width=True):
-#         st.session_state.show_analysis = True
-
-#     # Analyze immediately when password_input changes or Apply is clicked
-#     if st.session_state.password_input and (st.session_state.show_analysis or True):  # Keeping real-time updates
+#     # Analyze immediately when password_input changes
+#     if st.session_state.password_input:
 #         analysis = password_strength_analysis(st.session_state.password_input)
 #         score, rating, color = calculate_score_and_rating(analysis)
 #         feedback = generate_improvement_feedback(analysis, rating)
         
-#         # Update strength history (keep last 3)
-#         st.session_state.strength_history.append(f"{rating} ({score}/10)")
-#         st.session_state.strength_history = st.session_state.strength_history[-3:]
-        
 #         # Display Strength Rating
 #         st.markdown('#### Password Strength')
 #         st.markdown(f"""
-#         <div class="metric-box" style="text-align: center; background: {color}20; border: 2px solid {color};">
+#         <div class="metric-box" style="text-align: center; padding: 1rem; background: {color}20; border-radius: 5px;">
 #             <div style="font-size: 1.5rem; color: {color};">{rating}</div>
 #             <div style="font-size: 1rem;">Score: {score}/10</div>
 #         </div>
 #         """, unsafe_allow_html=True)
         
-#         # Progress Bar with gradient
+#         # Progress Bar
 #         progress_value = min(score / 10, 1.0)
 #         st.markdown(f"""
-#         <div class="stProgress" style="background: #eee;">
+#         <div class="stProgress">
 #             <div class="st-em" style="width: {progress_value*100}%;
-#                 background: linear-gradient(90deg, {color}, #fff); height: 12px;">
+#                 background-color: {color}; height: 10px; border-radius: 5px;">
 #             </div>
 #         </div>
 #         """, unsafe_allow_html=True)
@@ -743,15 +1074,10 @@
 #         if analysis['repeating']:
 #             st.warning("⚠️ Repeating characters detected")
         
-#         # Improvement Feedback with animation
+#         # Improvement Feedback
 #         st.markdown('#### How to Improve')
 #         for tip in feedback:
-#             st.markdown(f'<div class="feedback-item">- {tip}</div>', unsafe_allow_html=True)
-
-#         # Strength History
-#         st.markdown('#### Recent Strength History')
-#         for entry in reversed(st.session_state.strength_history):
-#             st.write(f"- {entry}")
+#             st.write(f"- {tip}")
 
 # with col2:
 #     st.markdown('### Password Generator')
@@ -762,26 +1088,17 @@
 #         include_numbers = st.checkbox("Numbers", True)
 #         include_special = st.checkbox("Special Chars", True)
     
-#     col_gen, col_regen = st.columns(2)
-#     with col_gen:
-#         if st.button("Generate Password", use_container_width=True):
-#             st.session_state.generated_password = generate_advanced_password(
-#                 pwd_length,
-#                 include_special=include_special,
-#                 include_numbers=include_numbers
-#             )
-#     with col_regen:
-#         if st.button("Regenerate", use_container_width=True):
-#             st.session_state.generated_password = generate_advanced_password(
-#                 pwd_length,
-#                 include_special=include_special,
-#                 include_numbers=include_numbers
-#             )
+#     if st.button("Generate Password", use_container_width=True):
+#         st.session_state.generated_password = generate_advanced_password(
+#             pwd_length,
+#             include_special=include_special,
+#             include_numbers=include_numbers
+#         )
     
 #     if st.session_state.generated_password:
 #         st.markdown(f'<div class="generated-password">{st.session_state.generated_password}</div>', unsafe_allow_html=True)
         
-#         if st.button("Copy to Clipboard", key="copy_button", help="Click to copy!", type="primary"):
+#         if st.button("Copy to Clipboard", key="copy_button"):
 #             try:
 #                 pyperclip.copy(st.session_state.generated_password)
 #                 st.success("Password copied to clipboard!")
@@ -809,634 +1126,317 @@
 #     """)
 
 # st.markdown("---")
-# st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.4.1")
+# st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.3.5")
 
 
 
+# import streamlit as st
+# import re
+# import random
+# import string
+# import requests
+# from hashlib import sha1
+# import pyperclip
 
-
-
-
-
-
-
-
-import streamlit as st
-import re
-import random
-import string
-import requests
-from hashlib import sha1
-import pyperclip
-
-# Custom CSS (unchanged)
-st.markdown("""
-<style>
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
+# # Custom CSS (unchanged)
+# st.markdown("""
+# <style>
+#     @keyframes fadeIn {
+#         from { opacity: 0; transform: translateY(-20px); }
+#         to { opacity: 1; transform: translateY(0); }
+#     }
     
-    @keyframes expertShine {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-    }
+#     @keyframes expertShine {
+#         0% { background-position: -200% 0; }
+#         100% { background-position: 200% 0; }
+#     }
     
-    .header-container {
-        animation: fadeIn 1s ease-out;
-        text-align: center;
-        padding: 2rem 0;
-        border-bottom: 3px solid #2c3e50;
-        margin-bottom: 2rem;
-    }
+#     .header-container {
+#         animation: fadeIn 1s ease-out;
+#         text-align: center;
+#         padding: 2rem 0;
+#         border-bottom: 3px solid #2c3e50;
+#         margin-bottom: 2rem;
+#     }
     
-    .expert-title {
-        font-size: 1.4rem;
-        background: linear-gradient(90deg, #2c3e50, #3498db, #2c3e50);
-        background-size: 200% auto;
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 25px;
-        display: inline-block;
-        animation: expertShine 3s linear infinite;
-        margin-top: 1rem;
-    }
+#     .expert-title {
+#         font-size: 1.4rem;
+#         background: linear-gradient(90deg, #2c3e50, #3498db, #2c3e50);
+#         background-size: 200% auto;
+#         color: white;
+#         padding: 0.5rem 1rem;
+#         border-radius: 25px;
+#         display: inline-block;
+#         animation: expertShine 3s linear infinite;
+#         margin-top: 1rem;
+#     }
     
-    .signature {
-        font-family: 'Brush Script MT', cursive;
-        font-size: 2rem;
-        color: #3498db;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        margin-bottom: 0.5rem;
-    }
+#     .signature {
+#         font-family: 'Brush Script MT', cursive;
+#         font-size: 2rem;
+#         color: #3498db;
+#         text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+#         margin-bottom: 0.5rem;
+#     }
     
-    .metric-box:hover {
-        transform: scale(1.02);
-        transition: transform 0.3s ease;
-    }
+#     .metric-box:hover {
+#         transform: scale(1.02);
+#         transition: transform 0.3s ease;
+#     }
     
-    @keyframes passwordPop {
-        0% { transform: scale(0.9); opacity: 0; }
-        100% { transform: scale(1); opacity: 1; }
-    }
+#     @keyframes passwordPop {
+#         0% { transform: scale(0.9); opacity: 0; }
+#         100% { transform: scale(1); opacity: 1; }
+#     }
     
-    .generated-password {
-        animation: passwordPop 0.5s ease-out;
-        font-family: 'Courier New', monospace;
-        padding: 1rem;
-        background: #f8f9fa;
-        border-radius: 5px;
-        margin: 10px 0;
-        word-break: break-all;
-    }
-</style>
-""", unsafe_allow_html=True)
+#     .generated-password {
+#         animation: passwordPop 0.5s ease-out;
+#         font-family: 'Courier New', monospace;
+#         padding: 1rem;
+#         background: #f8f9fa;
+#         border-radius: 5px;
+#         margin: 10px 0;
+#         word-break: break-all;
+#     }
+# </style>
+# """, unsafe_allow_html=True)
 
-# Image loading (unchanged)
-try:
-    st.image("github_dp_oval.png", width=100)
-except FileNotFoundError:
-    st.warning("Profile image not found. Please ensure 'github_dp_oval.png' is in the same directory.")
-except Exception as e:
-    st.warning(f"Error loading image: {str(e)}")
+# # Image loading (unchanged)
+# try:
+#     st.image("github_dp_oval.png", width=100)
+# except FileNotFoundError:
+#     st.warning("Profile image not found. Please ensure 'github_dp_oval.png' is in the same directory.")
+# except Exception as e:
+#     st.warning(f"Error loading image: {str(e)}")
 
-# Header (unchanged)
-st.markdown("""
-<div class="header-container">
-    <div class="signature">Ibrahim Tayyab</div>
-    <div style="color: #7f8c8d; margin-bottom: 0.5rem;">@Tayyab.R</div>
-    <div class="expert-title">Password Strength Checker</div>
-</div>
-""", unsafe_allow_html=True)
+# # Header (unchanged)
+# st.markdown("""
+# <div class="header-container">
+#     <div class="signature">Ibrahim Tayyab</div>
+#     <div style="color: #7f8c8d; margin-bottom: 0.5rem;">@Tayyab.R</div>
+#     <div class="expert-title">Password Strength Checker</div>
+# </div>
+# """, unsafe_allow_html=True)
 
-def check_breached_password(password):
-    """Check password against Have I Been Pwned database"""
-    sha1password = sha1(password.encode('utf-8')).hexdigest().upper()
-    prefix, suffix = sha1password[:5], sha1password[5:]
-    try:
-        response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}")
-        if response.status_code == 200:
-            hashes = (line.split(':') for line in response.text.splitlines())
-            for h, count in hashes:
-                if h == suffix:
-                    return int(count)
-    except Exception:
-        return None
-    return 0
+# def check_breached_password(password):
+#     """Check password against Have I Been Pwned database"""
+#     sha1password = sha1(password.encode('utf-8')).hexdigest().upper()
+#     prefix, suffix = sha1password[:5], sha1password[5:]
+#     try:
+#         response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}")
+#         if response.status_code == 200:
+#             hashes = (line.split(':') for line in response.text.splitlines())
+#             for h, count in hashes:
+#                 if h == suffix:
+#                     return int(count)
+#     except Exception:
+#         return None
+#     return 0
 
-def password_strength_analysis(password):
-    """Analyze password characteristics"""
-    analysis = {
-        'length': len(str(password)),
-        'uppercase': bool(re.search(r'[A-Z]', password)),
-        'lowercase': bool(re.search(r'[a-z]', password)),
-        'digit': bool(re.search(r'\d', password)),
-        'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password)),
-        'repeating': bool(re.search(r'(.)\1{2,}', password)),
-        'sequences': bool(re.search(r'(1234|abcd|qwerty|asdfgh|zxcvbn)', password.lower())),
-        'common': password.lower() in [p.lower() for p in common_passwords],
-        'breach_count': check_breached_password(password)
-    }
-    return analysis
+# def password_strength_analysis(password):
+#     """Analyze password characteristics"""
+#     analysis = {
+#         'length': len(str(password)),
+#         'uppercase': bool(re.search(r'[A-Z]', password)),
+#         'lowercase': bool(re.search(r'[a-z]', password)),
+#         'digit': bool(re.search(r'\d', password)),
+#         'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password)),
+#         'repeating': bool(re.search(r'(.)\1{2,}', password)),
+#         'sequences': bool(re.search(r'(1234|abcd|qwerty|asdfgh|zxcvbn)', password.lower())),
+#         'common': password.lower() in [p.lower() for p in common_passwords],
+#         'breach_count': check_breached_password(password)
+#     }
+#     return analysis
 
-def calculate_score_and_rating(analysis):
-    """Calculate password strength score and assign rating"""
-    score = 0
-    length = analysis['length']
+# def calculate_score_and_rating(analysis):
+#     """Calculate password strength score and assign rating"""
+#     score = 0
+#     length = analysis['length']
     
-    if length >= 16: score += 4
-    elif length >= 12: score += 3
-    elif length >= 8: score += 2
-    elif length < 6: score -= 1
+#     if length >= 16: score += 4
+#     elif length >= 12: score += 3
+#     elif length >= 8: score += 2
+#     elif length < 6: score -= 1
     
-    if analysis['uppercase']: score += 1
-    if analysis['lowercase']: score += 1
-    if analysis['digit']: score += 1
-    if analysis['special']: score += 2
+#     if analysis['uppercase']: score += 1
+#     if analysis['lowercase']: score += 1
+#     if analysis['digit']: score += 1
+#     if analysis['special']: score += 2
     
-    if analysis['repeating']: score -= 2
-    if analysis['sequences']: score -= 3
-    if analysis['common']: score = 0
+#     if analysis['repeating']: score -= 2
+#     if analysis['sequences']: score -= 3
+#     if analysis['common']: score = 0
     
-    final_score = max(min(score, 10), 0)
+#     final_score = max(min(score, 10), 0)
     
-    if final_score >= 8:
-        rating = "Strong"
-        color = "#2ecc71"
-    elif final_score >= 5:
-        rating = "Moderate"
-        color = "#f1c40f"
-    else:
-        rating = "Weak"
-        color = "#e74c3c"
+#     if final_score >= 8:
+#         rating = "Strong"
+#         color = "#2ecc71"
+#     elif final_score >= 5:
+#         rating = "Moderate"
+#         color = "#f1c40f"
+#     else:
+#         rating = "Weak"
+#         color = "#e74c3c"
     
-    return final_score, rating, color
+#     return final_score, rating, color
 
-def generate_improvement_feedback(analysis, rating):
-    """Provide specific feedback to improve weak passwords"""
-    feedback = []
+# def generate_improvement_feedback(analysis, rating):
+#     """Provide specific feedback to improve weak passwords"""
+#     feedback = []
     
-    if rating in ["Weak", "Moderate"]:
-        if analysis['length'] < 12:
-            feedback.append(f"Increase length to at least 12 characters (currently {analysis['length']})")
-        if not analysis['uppercase']:
-            feedback.append("Add uppercase letters (e.g., A, B, C)")
-        if not analysis['lowercase']:
-            feedback.append("Add lowercase letters (e.g., a, b, c)")
-        if not analysis['digit']:
-            feedback.append("Include numbers (e.g., 0-9)")
-        if not analysis['special']:
-            feedback.append("Add special characters (e.g., !@#$%^&*)")
-        if analysis['repeating']:
-            feedback.append("Avoid repeating characters (e.g., aaa)")
-        if analysis['sequences']:
-            feedback.append("Remove predictable sequences (e.g., 1234, qwerty)")
-        if analysis['common']:
-            feedback.append("Avoid common passwords (e.g., 'password')")
+#     if rating in ["Weak", "Moderate"]:
+#         if analysis['length'] < 12:
+#             feedback.append(f"Increase length to at least 12 characters (currently {analysis['length']})")
+#         if not analysis['uppercase']:
+#             feedback.append("Add uppercase letters (e.g., A, B, C)")
+#         if not analysis['lowercase']:
+#             feedback.append("Add lowercase letters (e.g., a, b, c)")
+#         if not analysis['digit']:
+#             feedback.append("Include numbers (e.g., 0-9)")
+#         if not analysis['special']:
+#             feedback.append("Add special characters (e.g., !@#$%^&*)")
+#         if analysis['repeating']:
+#             feedback.append("Avoid repeating characters (e.g., aaa)")
+#         if analysis['sequences']:
+#             feedback.append("Remove predictable sequences (e.g., 1234, qwerty)")
+#         if analysis['common']:
+#             feedback.append("Avoid common passwords (e.g., 'password')")
     
-    return feedback if feedback else ["Password is strong - great job!"]
+#     return feedback if feedback else ["Password is strong - great job!"]
 
-def generate_advanced_password(length=16, include_special=True, include_numbers=True):
-    """Generate a secure random password"""
-    chars = string.ascii_letters
-    if include_numbers: chars += string.digits
-    if include_special: chars += '!@#$%^&*'
+# def generate_advanced_password(length=16, include_special=True, include_numbers=True):
+#     """Generate a secure random password"""
+#     chars = string.ascii_letters
+#     if include_numbers: chars += string.digits
+#     if include_special: chars += '!@#$%^&*'
     
-    while True:
-        password = ''.join(random.choice(chars) for _ in range(length))
-        analysis = password_strength_analysis(password)
-        if (analysis['uppercase'] and analysis['lowercase'] and 
-            (not include_numbers or analysis['digit']) and 
-            (not include_special or analysis['special'])):
-            return password
+#     while True:
+#         password = ''.join(random.choice(chars) for _ in range(length))
+#         analysis = password_strength_analysis(password)
+#         if (analysis['uppercase'] and analysis['lowercase'] and 
+#             (not include_numbers or analysis['digit']) and 
+#             (not include_special or analysis['special'])):
+#             return password
 
-common_passwords = ['password', '123456', 'qwerty', 'admin', 'welcome']
+# common_passwords = ['password', '123456', 'qwerty', 'admin', 'welcome']
 
-# Initialize session state
-if 'generated_password' not in st.session_state:
-    st.session_state.generated_password = ""
-if 'password_input' not in st.session_state:
-    st.session_state.password_input = ""
+# # Initialize session state
+# if 'generated_password' not in st.session_state:
+#     st.session_state.generated_password = ""
+# if 'password_input' not in st.session_state:
+#     st.session_state.password_input = ""
 
-col1, col2 = st.columns([2, 1], gap="large")
+# col1, col2 = st.columns([2, 1], gap="large")
 
-with col1:
-    st.markdown('### Security Assessment')
+# with col1:
+#     st.markdown('### Security Assessment')
     
-    # Text input with immediate updates
-    st.text_input(
-        "Enter password for analysis:", 
-        type="password",
-        key="password_input"  # This ties the input directly to session_state.password_input
-    )
+#     # Text input with immediate updates
+#     password = st.text_input(
+#         "Enter password for analysis:", 
+#         type="password",
+#         value=st.session_state.password_input,
+#         key="password_input"
+#     )
 
-    # Analyze immediately when password_input changes
-    if st.session_state.password_input:
-        analysis = password_strength_analysis(st.session_state.password_input)
-        score, rating, color = calculate_score_and_rating(analysis)
-        feedback = generate_improvement_feedback(analysis, rating)
+#     # Analyze immediately when password_input changes
+#     if st.session_state.password_input:
+#         analysis = password_strength_analysis(st.session_state.password_input)
+#         score, rating, color = calculate_score_and_rating(analysis)
+#         feedback = generate_improvement_feedback(analysis, rating)
         
-        # Display Strength Rating
-        st.markdown('#### Password Strength')
-        st.markdown(f"""
-        <div class="metric-box" style="text-align: center; padding: 1rem; background: {color}20; border-radius: 5px;">
-            <div style="font-size: 1.5rem; color: {color};">{rating}</div>
-            <div style="font-size: 1rem;">Score: {score}/10</div>
-        </div>
-        """, unsafe_allow_html=True)
+#         # Display Strength Rating
+#         st.markdown('#### Password Strength')
+#         st.markdown(f"""
+#         <div class="metric-box" style="text-align: center; padding: 1rem; background: {color}20; border-radius: 5px;">
+#             <div style="font-size: 1.5rem; color: {color};">{rating}</div>
+#             <div style="font-size: 1rem;">Score: {score}/10</div>
+#         </div>
+#         """, unsafe_allow_html=True)
         
-        # Progress Bar
-        progress_value = min(score / 10, 1.0)
-        st.markdown(f"""
-        <div class="stProgress">
-            <div class="st-em" style="width: {progress_value*100}%;
-                background-color: {color}; height: 10px; border-radius: 5px;">
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+#         # Progress Bar
+#         progress_value = min(score / 10, 1.0)
+#         st.markdown(f"""
+#         <div class="stProgress">
+#             <div class="st-em" style="width: {progress_value*100}%;
+#                 background-color: {color}; height: 10px; border-radius: 5px;">
+#             </div>
+#         </div>
+#         """, unsafe_allow_html=True)
         
-        # Detailed Analysis
-        st.markdown('#### Analysis Details')
-        st.write(f"Length: {analysis['length']} characters")
-        st.write(f"Uppercase: {'Yes' if analysis['uppercase'] else 'No'}")
-        st.write(f"Lowercase: {'Yes' if analysis['lowercase'] else 'No'}")
-        st.write(f"Numbers: {'Yes' if analysis['digit'] else 'No'}")
-        st.write(f"Special Chars: {'Yes' if analysis['special'] else 'No'}")
+#         # Detailed Analysis
+#         st.markdown('#### Analysis Details')
+#         st.write(f"Length: {analysis['length']} characters")
+#         st.write(f"Uppercase: {'Yes' if analysis['uppercase'] else 'No'}")
+#         st.write(f"Lowercase: {'Yes' if analysis['lowercase'] else 'No'}")
+#         st.write(f"Numbers: {'Yes' if analysis['digit'] else 'No'}")
+#         st.write(f"Special Chars: {'Yes' if analysis['special'] else 'No'}")
         
-        # Vulnerability Report
-        st.markdown('#### Vulnerability Report')
-        if analysis['breach_count']:
-            st.error(f"🚨 Breached {analysis['breach_count']} times")
-        if analysis['common']:
-            st.error("🚨 Common password detected")
-        if analysis['sequences']:
-            st.warning("⚠️ Predictable sequence found")
-        if analysis['repeating']:
-            st.warning("⚠️ Repeating characters detected")
+#         # Vulnerability Report
+#         st.markdown('#### Vulnerability Report')
+#         if analysis['breach_count']:
+#             st.error(f"🚨 Breached {analysis['breach_count']} times")
+#         if analysis['common']:
+#             st.error("🚨 Common password detected")
+#         if analysis['sequences']:
+#             st.warning("⚠️ Predictable sequence found")
+#         if analysis['repeating']:
+#             st.warning("⚠️ Repeating characters detected")
         
-        # Improvement Feedback
-        st.markdown('#### How to Improve')
-        for tip in feedback:
-            st.write(f"- {tip}")
+#         # Improvement Feedback
+#         st.markdown('#### How to Improve')
+#         for tip in feedback:
+#             st.write(f"- {tip}")
 
-with col2:
-    st.markdown('### Password Generator')
-    with st.expander("Options", expanded=True):
-        pwd_length = st.slider("Length", 12, 32, 16)
-        include_upper = st.checkbox("Uppercase", True)
-        include_lower = st.checkbox("Lowercase", True)
-        include_numbers = st.checkbox("Numbers", True)
-        include_special = st.checkbox("Special Chars", True)
+# with col2:
+#     st.markdown('### Password Generator')
+#     with st.expander("Options", expanded=True):
+#         pwd_length = st.slider("Length", 12, 32, 16)
+#         include_upper = st.checkbox("Uppercase", True)
+#         include_lower = st.checkbox("Lowercase", True)
+#         include_numbers = st.checkbox("Numbers", True)
+#         include_special = st.checkbox("Special Chars", True)
     
-    if st.button("Generate Password", use_container_width=True):
-        st.session_state.generated_password = generate_advanced_password(
-            pwd_length,
-            include_special=include_special,
-            include_numbers=include_numbers
-        )
+#     if st.button("Generate Password", use_container_width=True):
+#         st.session_state.generated_password = generate_advanced_password(
+#             pwd_length,
+#             include_special=include_special,
+#             include_numbers=include_numbers
+#         )
     
-    if st.session_state.generated_password:
-        st.markdown(f'<div class="generated-password">{st.session_state.generated_password}</div>', unsafe_allow_html=True)
+#     if st.session_state.generated_password:
+#         st.markdown(f'<div class="generated-password">{st.session_state.generated_password}</div>', unsafe_allow_html=True)
         
-        if st.button("Copy to Clipboard", key="copy_button"):
-            try:
-                pyperclip.copy(st.session_state.generated_password)
-                st.success("Password copied to clipboard!")
-                st.balloons()
-            except Exception as e:
-                st.error(f"Failed to copy: {str(e)}")
-                st.info("Please copy manually by selecting the password above.")
+#         if st.button("Copy to Clipboard", key="copy_button"):
+#             try:
+#                 pyperclip.copy(st.session_state.generated_password)
+#                 st.success("Password copied to clipboard!")
+#                 st.balloons()
+#             except Exception as e:
+#                 st.error(f"Failed to copy: {str(e)}")
+#                 st.info("Please copy manually by selecting the password above.")
         
-        st.download_button(
-            label="Download Password",
-            data=st.session_state.generated_password,
-            file_name="generated_password.txt",
-            mime="text/plain"
-        )
+#         st.download_button(
+#             label="Download Password",
+#             data=st.session_state.generated_password,
+#             file_name="generated_password.txt",
+#             mime="text/plain"
+#         )
 
-st.markdown("---")
-with st.expander("Security Guidelines"):
-    st.markdown("""
-    **Enterprise Standards**
-    - 12+ character minimum
-    - Mix character types
-    - No personal info
-    - Regular rotation
-    - Unique per service
-    """)
+# st.markdown("---")
+# with st.expander("Security Guidelines"):
+#     st.markdown("""
+#     **Enterprise Standards**
+#     - 12+ character minimum
+#     - Mix character types
+#     - No personal info
+#     - Regular rotation
+#     - Unique per service
+#     """)
 
-st.markdown("---")
-st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.3.5")
-
-
-
-import streamlit as st
-import re
-import random
-import string
-import requests
-from hashlib import sha1
-import pyperclip
-
-# Custom CSS (unchanged)
-st.markdown("""
-<style>
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    @keyframes expertShine {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-    }
-    
-    .header-container {
-        animation: fadeIn 1s ease-out;
-        text-align: center;
-        padding: 2rem 0;
-        border-bottom: 3px solid #2c3e50;
-        margin-bottom: 2rem;
-    }
-    
-    .expert-title {
-        font-size: 1.4rem;
-        background: linear-gradient(90deg, #2c3e50, #3498db, #2c3e50);
-        background-size: 200% auto;
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 25px;
-        display: inline-block;
-        animation: expertShine 3s linear infinite;
-        margin-top: 1rem;
-    }
-    
-    .signature {
-        font-family: 'Brush Script MT', cursive;
-        font-size: 2rem;
-        color: #3498db;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        margin-bottom: 0.5rem;
-    }
-    
-    .metric-box:hover {
-        transform: scale(1.02);
-        transition: transform 0.3s ease;
-    }
-    
-    @keyframes passwordPop {
-        0% { transform: scale(0.9); opacity: 0; }
-        100% { transform: scale(1); opacity: 1; }
-    }
-    
-    .generated-password {
-        animation: passwordPop 0.5s ease-out;
-        font-family: 'Courier New', monospace;
-        padding: 1rem;
-        background: #f8f9fa;
-        border-radius: 5px;
-        margin: 10px 0;
-        word-break: break-all;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Image loading (unchanged)
-try:
-    st.image("github_dp_oval.png", width=100)
-except FileNotFoundError:
-    st.warning("Profile image not found. Please ensure 'github_dp_oval.png' is in the same directory.")
-except Exception as e:
-    st.warning(f"Error loading image: {str(e)}")
-
-# Header (unchanged)
-st.markdown("""
-<div class="header-container">
-    <div class="signature">Ibrahim Tayyab</div>
-    <div style="color: #7f8c8d; margin-bottom: 0.5rem;">@Tayyab.R</div>
-    <div class="expert-title">Password Strength Checker</div>
-</div>
-""", unsafe_allow_html=True)
-
-def check_breached_password(password):
-    """Check password against Have I Been Pwned database"""
-    sha1password = sha1(password.encode('utf-8')).hexdigest().upper()
-    prefix, suffix = sha1password[:5], sha1password[5:]
-    try:
-        response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}")
-        if response.status_code == 200:
-            hashes = (line.split(':') for line in response.text.splitlines())
-            for h, count in hashes:
-                if h == suffix:
-                    return int(count)
-    except Exception:
-        return None
-    return 0
-
-def password_strength_analysis(password):
-    """Analyze password characteristics"""
-    analysis = {
-        'length': len(str(password)),
-        'uppercase': bool(re.search(r'[A-Z]', password)),
-        'lowercase': bool(re.search(r'[a-z]', password)),
-        'digit': bool(re.search(r'\d', password)),
-        'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password)),
-        'repeating': bool(re.search(r'(.)\1{2,}', password)),
-        'sequences': bool(re.search(r'(1234|abcd|qwerty|asdfgh|zxcvbn)', password.lower())),
-        'common': password.lower() in [p.lower() for p in common_passwords],
-        'breach_count': check_breached_password(password)
-    }
-    return analysis
-
-def calculate_score_and_rating(analysis):
-    """Calculate password strength score and assign rating"""
-    score = 0
-    length = analysis['length']
-    
-    if length >= 16: score += 4
-    elif length >= 12: score += 3
-    elif length >= 8: score += 2
-    elif length < 6: score -= 1
-    
-    if analysis['uppercase']: score += 1
-    if analysis['lowercase']: score += 1
-    if analysis['digit']: score += 1
-    if analysis['special']: score += 2
-    
-    if analysis['repeating']: score -= 2
-    if analysis['sequences']: score -= 3
-    if analysis['common']: score = 0
-    
-    final_score = max(min(score, 10), 0)
-    
-    if final_score >= 8:
-        rating = "Strong"
-        color = "#2ecc71"
-    elif final_score >= 5:
-        rating = "Moderate"
-        color = "#f1c40f"
-    else:
-        rating = "Weak"
-        color = "#e74c3c"
-    
-    return final_score, rating, color
-
-def generate_improvement_feedback(analysis, rating):
-    """Provide specific feedback to improve weak passwords"""
-    feedback = []
-    
-    if rating in ["Weak", "Moderate"]:
-        if analysis['length'] < 12:
-            feedback.append(f"Increase length to at least 12 characters (currently {analysis['length']})")
-        if not analysis['uppercase']:
-            feedback.append("Add uppercase letters (e.g., A, B, C)")
-        if not analysis['lowercase']:
-            feedback.append("Add lowercase letters (e.g., a, b, c)")
-        if not analysis['digit']:
-            feedback.append("Include numbers (e.g., 0-9)")
-        if not analysis['special']:
-            feedback.append("Add special characters (e.g., !@#$%^&*)")
-        if analysis['repeating']:
-            feedback.append("Avoid repeating characters (e.g., aaa)")
-        if analysis['sequences']:
-            feedback.append("Remove predictable sequences (e.g., 1234, qwerty)")
-        if analysis['common']:
-            feedback.append("Avoid common passwords (e.g., 'password')")
-    
-    return feedback if feedback else ["Password is strong - great job!"]
-
-def generate_advanced_password(length=16, include_special=True, include_numbers=True):
-    """Generate a secure random password"""
-    chars = string.ascii_letters
-    if include_numbers: chars += string.digits
-    if include_special: chars += '!@#$%^&*'
-    
-    while True:
-        password = ''.join(random.choice(chars) for _ in range(length))
-        analysis = password_strength_analysis(password)
-        if (analysis['uppercase'] and analysis['lowercase'] and 
-            (not include_numbers or analysis['digit']) and 
-            (not include_special or analysis['special'])):
-            return password
-
-common_passwords = ['password', '123456', 'qwerty', 'admin', 'welcome']
-
-# Initialize session state
-if 'generated_password' not in st.session_state:
-    st.session_state.generated_password = ""
-if 'password_input' not in st.session_state:
-    st.session_state.password_input = ""
-
-col1, col2 = st.columns([2, 1], gap="large")
-
-with col1:
-    st.markdown('### Security Assessment')
-    
-    # Text input with immediate updates
-    password = st.text_input(
-        "Enter password for analysis:", 
-        type="password",
-        value=st.session_state.password_input,
-        key="password_input"
-    )
-
-    # Analyze immediately when password_input changes
-    if st.session_state.password_input:
-        analysis = password_strength_analysis(st.session_state.password_input)
-        score, rating, color = calculate_score_and_rating(analysis)
-        feedback = generate_improvement_feedback(analysis, rating)
-        
-        # Display Strength Rating
-        st.markdown('#### Password Strength')
-        st.markdown(f"""
-        <div class="metric-box" style="text-align: center; padding: 1rem; background: {color}20; border-radius: 5px;">
-            <div style="font-size: 1.5rem; color: {color};">{rating}</div>
-            <div style="font-size: 1rem;">Score: {score}/10</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Progress Bar
-        progress_value = min(score / 10, 1.0)
-        st.markdown(f"""
-        <div class="stProgress">
-            <div class="st-em" style="width: {progress_value*100}%;
-                background-color: {color}; height: 10px; border-radius: 5px;">
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Detailed Analysis
-        st.markdown('#### Analysis Details')
-        st.write(f"Length: {analysis['length']} characters")
-        st.write(f"Uppercase: {'Yes' if analysis['uppercase'] else 'No'}")
-        st.write(f"Lowercase: {'Yes' if analysis['lowercase'] else 'No'}")
-        st.write(f"Numbers: {'Yes' if analysis['digit'] else 'No'}")
-        st.write(f"Special Chars: {'Yes' if analysis['special'] else 'No'}")
-        
-        # Vulnerability Report
-        st.markdown('#### Vulnerability Report')
-        if analysis['breach_count']:
-            st.error(f"🚨 Breached {analysis['breach_count']} times")
-        if analysis['common']:
-            st.error("🚨 Common password detected")
-        if analysis['sequences']:
-            st.warning("⚠️ Predictable sequence found")
-        if analysis['repeating']:
-            st.warning("⚠️ Repeating characters detected")
-        
-        # Improvement Feedback
-        st.markdown('#### How to Improve')
-        for tip in feedback:
-            st.write(f"- {tip}")
-
-with col2:
-    st.markdown('### Password Generator')
-    with st.expander("Options", expanded=True):
-        pwd_length = st.slider("Length", 12, 32, 16)
-        include_upper = st.checkbox("Uppercase", True)
-        include_lower = st.checkbox("Lowercase", True)
-        include_numbers = st.checkbox("Numbers", True)
-        include_special = st.checkbox("Special Chars", True)
-    
-    if st.button("Generate Password", use_container_width=True):
-        st.session_state.generated_password = generate_advanced_password(
-            pwd_length,
-            include_special=include_special,
-            include_numbers=include_numbers
-        )
-    
-    if st.session_state.generated_password:
-        st.markdown(f'<div class="generated-password">{st.session_state.generated_password}</div>', unsafe_allow_html=True)
-        
-        if st.button("Copy to Clipboard", key="copy_button"):
-            try:
-                pyperclip.copy(st.session_state.generated_password)
-                st.success("Password copied to clipboard!")
-                st.balloons()
-            except Exception as e:
-                st.error(f"Failed to copy: {str(e)}")
-                st.info("Please copy manually by selecting the password above.")
-        
-        st.download_button(
-            label="Download Password",
-            data=st.session_state.generated_password,
-            file_name="generated_password.txt",
-            mime="text/plain"
-        )
-
-st.markdown("---")
-with st.expander("Security Guidelines"):
-    st.markdown("""
-    **Enterprise Standards**
-    - 12+ character minimum
-    - Mix character types
-    - No personal info
-    - Regular rotation
-    - Unique per service
-    """)
-
-st.markdown("---")
-st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.3.5")
+# st.markdown("---")
+# st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.3.5")
 
 
 
