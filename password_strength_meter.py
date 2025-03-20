@@ -4,7 +4,14 @@ import random
 import string
 import requests
 from hashlib import sha1
-import pyperclip
+
+# Try to import pyperclip, handle if not available
+try:
+    import pyperclip
+    pyperclip_available = True
+except ImportError:
+    pyperclip_available = False
+    st.warning("Clipboard functionality is not available. Please install 'pyperclip' to enable copy/paste features. On Linux, you may also need to install 'xclip' or 'xsel'.")
 
 # Custom CSS with animations and button styling
 st.markdown("""
@@ -240,7 +247,7 @@ def generate_advanced_password(length=16, include_special=True, include_numbers=
 
 common_passwords = ['password', '123456', 'qwerty', 'admin', 'welcome']
 
-# Initialize session state st.session_state.password_input_value cannot be modified after being retrieved
+# Initialize session state
 if 'generated_password' not in st.session_state:
     st.session_state.generated_password = ""
 if 'password_input_value' not in st.session_state:
@@ -275,7 +282,7 @@ with col1:
         if password_input != st.session_state.password_input_value:
             st.session_state.password_input_value = password_input
     with col_paste:
-        if st.button("📋", help="Paste from clipboard"):
+        if st.button("📋", help="Paste from clipboard", disabled=not pyperclip_available):
             try:
                 pasted_text = pyperclip.paste()
                 if pasted_text:
@@ -285,7 +292,6 @@ with col1:
                     st.warning("Clipboard is empty or inaccessible.")
             except Exception as e:
                 st.error(f"Failed to paste: {str(e)}")
-                st.info("Ensure pyperclip is properly configured. On Linux, you may need to install 'xclip' or 'xsel'.")
     with col_clear:
         if st.button("🗑️", help="Clear input"):
             st.session_state.password_input_value = ""
@@ -382,14 +388,13 @@ with col2:
     if st.session_state.generated_password:
         st.markdown(f'<div class="generated-password">{st.session_state.generated_password}</div>', unsafe_allow_html=True)
         
-        if st.button("Copy to Clipboard", key="copy_button", help="Click to copy!", type="primary"):
+        if st.button("Copy to Clipboard", key="copy_button", help="Click to copy!", type="primary", disabled=not pyperclip_available):
             try:
                 pyperclip.copy(st.session_state.generated_password)
                 st.success("Password copied to clipboard!")
                 st.balloons()
             except Exception as e:
                 st.error(f"Failed to copy: {str(e)}")
-                st.info("Ensure pyperclip is properly configured. On Linux, you may need to install 'xclip' or 'xsel'.")
         
         st.download_button(
             label="Download Password",
@@ -410,7 +415,7 @@ with st.expander("Security Guidelines"):
     """)
 
 st.markdown("---")
-st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.4.5")
+st.caption("🔐 Secured by Ibrahim Tayyab | Password Strength Checker | v1.4.6")
 
 
 
